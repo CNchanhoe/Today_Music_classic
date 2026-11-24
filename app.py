@@ -22,7 +22,7 @@ else:
     FRONTEND_PATH = BASE_DIR / "frontend" / "index.html"
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
-app = FastAPI(title="고양이 뷔페 API")
+app = FastAPI(title="Für Seungju API")
 
 import base64 as _b64
 from fastapi.responses import Response as _Resp
