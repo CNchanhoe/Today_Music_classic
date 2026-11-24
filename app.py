@@ -1,9 +1,8 @@
 import json
+import re
 import random
 import sqlite3
-from contextlib import closing
 from datetime import datetime
-from functools import lru_cache
 from pathlib import Path
 from typing import List, Optional
 
@@ -23,13 +22,16 @@ else:
     FRONTEND_PATH = BASE_DIR / "frontend" / "index.html"
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
-app = FastAPI(title="오늘의 음악 API")
+app = FastAPI(title="고양이 뷔페 API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+CLASSICAL_COMPOSER_WHITELIST_RE = re.compile(r"\balbeniz\b|\balbinoni\b|\balbéniz\b|\balfven\b|\balfvén\b|\balkan\b|\barensky\b|\bbach\b|\bbalakirev\b|\bbarber\b|\bbarrios\b|\bbartok\b|\bmilhaud\b|\bmassenet\b|\bgluck\b|\bbartók\b|\bbax\b|amy\s+beach|\bbeethoven\b|\bbellini\b|\bberlioz\b|\bbernstein\b|\bberwald\b|\bbiber\b|\bbizet\b|\bboccherini\b|\bborodin\b|\bbrahms\b|frank\s+bridge|\bbritten\b|\bbruch\b|\bbruckner\b|\bbusoni\b|\bbuxtehude\b|\bcarcassi\b|\bchabrier\b|\bchausson\b|\bchopin\b|\bclementi\b|\bcopland\b|\bcorelli\b|\bcouperin\b|\bcui\b|\bczerny\b|\bdebussy\b|\bdelibes\b|\bdelius\b|\bdiabelli\b|\bdittersdorf\b|\bdonizetti\b|\bdukas\b|\bdvorak\b|\bdvořák\b|\belgar\b|\benescu\b|\bfalla\b|\bfaure\b|\bfauré\b|\bfibich\b|\bfinzi\b|\bfranck\b|\bgershwin\b|\bginastera\b|\bgiuliani\b|\bglazunov\b|\bgluck\b|\bgounod\b|\bgranados\b|\bgrieg\b|\bhandel\b|\bhaydn\b|\bholst\b|\bhummel\b|john\s+ireland|\bjanacek\b|\bjanáček\b|\bjoachim\b|\bkalinnikov\b|\bkalman\b|\bkhachaturian\b|\bkodaly\b|\bkodály\b|\bkuhlau\b|\bkálmán\b|\blalo\b|\blehar\b|\blehár\b|\bleoncavallo\b|\bliadov\b|\bliszt\b|\blocatelli\b|\blully\b|\blyapunov\b|\bmacdowell\b|\bmahler\b|\bmarcello\b|\bmartinu\b|\bmartinů\b|\bmascagni\b|\bmassenet\b|\bmedtner\b|\bmendelssohn\b|\bmeyerbeer\b|\bmonteverdi\b|\bmozart\b|\bmussorgsky\b|\bnielsen\b|\boffenbach\b|\bpachelbel\b|\bpaganini\b|\bpergolesi\b|\bponce\b|\bprokofiev\b|\bpuccini\b|\bpurcell\b|\brachmaninoff\b|\brameau\b|\bravel\b|\breger\b|\brespighi\b|\brimsky\-korsakov\b|\brodrigo\b|\brossini\b|\bsaint\-saens\b|\bsaint\-saëns\b|\bsalieri\b|\bsarasate\b|\bsatie\b|\bscarlatti\b|\bschubert\b|\bschumann\b|\bscriabin\b|\bshostakovich\b|\bsibelius\b|\bsmetana\b|fernando\s+sor|\bspohr\b|\bstamitz\b|\bstenhammar\b|\bstrauss\b|\bstravinsky\b|josef\s+suk|\bsvendsen\b|\btaneyev\b|\btarrega\b|\btartini\b|\btchaikovsky\b|\btelemann\b|\bthalberg\b|\bturina\b|\btárrega\b|\bverdi\b|\bvieuxtemps\b|\bvilla\-lobos\b|\bviotti\b|\bvivaldi\b|\bwagner\b|\bwalton\b|\bweiss\b|\bwieniawski\b|vaughan\s+williams|hugo\s+wolf", re.I)
+CLASSICAL_EXCLUDE_RE = re.compile(r"[\u3040-\u309F\u30A0-\u30FF]|k\.k\.|totakeke|animal crossing|nintendo|ghibli|zelda|final fantasy|touhou|vocaloid|hatsune|piano variation|piano arrangement|music box|bgm|instrumental version|acoustic version|piano version|오르골|피아노 버전|베리에이션|yiruma|hisaishi|sakamoto|einaudi|richter|tiersen|clayderman|2cellos|garrett|maksim|queen|beatles|coldplay|radiohead|muse|metallica|pink floyd|led zeppelin|oasis|nirvana|linkin park|imagine dragons|soundtrack|\bost\b|anime|\bgame\b|cover|tribute|karaoke|remix|8-bit|lullaby|medley|jazz|rock|metal|hip.?hop|\bpop\b|synth|electronic|new age|ambient|crossover|cinematic|lofi|lo-fi|avant.?garde|atonal|serialism|twelve.?tone|electroacoustic|musique concrète|microtonal|experimental|noise|\bcage\b|stockhausen|xenakis|boulez|penderecki|ligeti|ferneyhough|schoenberg|webern|\bberg\b|feldman|berio|\bnono\b|feat\.|이루마|히사이시|류이치|커버|리믹스|자장가|동물의 숲|지브리", re.I)
 
 GENRE_ARTISTS = {
     "pop": [
@@ -257,106 +259,1324 @@ GENRE_ARTISTS = {
 }
 
 GENRE_TO_MB_TAGS = {
-    "pop": ["pop", "synthpop", "dance pop"],
-    "kpop": ["k-pop", "korean", "kpop"],
-    "rnb": ["rnb", "contemporary rnb"],
-    "soul": ["soul", "neo soul", "funk"],
-    "indie": ["indie", "indie pop", "indie folk"],
-    "rock": ["rock", "alternative rock", "modern rock"],
-    "hiphop": ["hip hop", "rap", "boom bap"],
-    "jazz": ["jazz", "smooth jazz", "bossa nova"],
-    "classical": ["symphony", "concerto", "violin concerto", "piano concerto", "cello concerto", "piano sonata", "violin sonata", "cello sonata", "string quartet", "chamber music", "nocturne", "prelude", "etude", "symphonic poem", "overture", "baroque", "romanticism", "impressionism", "classical"],
-    "lofi": ["lo-fi", "chillhop", "instrumental"],
-    "ambient": ["ambient", "chillout", "dream pop"],
-    "citypop": ["city pop", "japanese pop", "disco"],
-    "acoustic": ["acoustic", "singer-songwriter", "folk"],
+    "all": [
+        "symphony",
+        "concerto",
+        "piano sonata",
+        "string quartet",
+        "nocturne",
+        "baroque",
+        "opera aria"
+    ],
+    "orchestra": [
+        "symphony",
+        "symphonic poem",
+        "overture",
+        "orchestral suite",
+        "philharmonic"
+    ],
+    "piano": [
+        "piano sonata",
+        "nocturne",
+        "etude",
+        "prelude",
+        "ballade",
+        "impromptu"
+    ],
+    "strings": [
+        "violin sonata",
+        "cello suite",
+        "violin concerto",
+        "cello concerto",
+        "solo violin"
+    ],
+    "winds": [
+        "flute concerto",
+        "clarinet concerto",
+        "horn concerto",
+        "oboe concerto",
+        "bassoon",
+        "wind quintet"
+    ],
+    "percussion": [
+        "timpani",
+        "marimba",
+        "percussion concerto",
+        "bartok percussion",
+        "xylophone classical"
+    ],
+    "chamber": [
+        "string quartet",
+        "piano trio",
+        "piano quintet",
+        "chamber music",
+        "octet"
+    ],
+    "concerto": [
+        "piano concerto",
+        "violin concerto",
+        "cello concerto",
+        "double concerto",
+        "brandenburg"
+    ],
+    "opera": [
+        "opera aria",
+        "soprano aria",
+        "puccini aria",
+        "verdi opera",
+        "mozart opera"
+    ],
+    "vocal": [
+        "lied",
+        "schubert lieder",
+        "requiem",
+        "cantata",
+        "choral classical",
+        "ave maria"
+    ],
+    "baroque": [
+        "baroque",
+        "harpsichord",
+        "vivaldi",
+        "handel",
+        "telemann",
+        "scarlatti"
+    ]
 }
 
 SEED_SONGS = [
-    ("s1", "Paris in the Rain", "Lauv", ["pop", "rnb", "acoustic"], ["morning", "afternoon", "sunset"], ["drizzle", "rainy", "partly_cloudy"], ["calm", "drowsy", "excited", "happy"], ["refresh", "comfort", "rest"]),
-    ("s2", "Happy", "Pharrell Williams", ["pop", "soul"], ["early_morning", "morning", "afternoon"], ["sunny", "clear_breeze"], ["happy", "stressed", "frustrated", "drowsy"], ["excited_up", "energize", "refresh"]),
-    ("s3", "Don't Know Why", "Norah Jones", ["jazz", "pop"], ["early_morning", "morning", "afternoon", "late_night"], ["drizzle", "rainy", "cloudy", "foggy"], ["calm", "drowsy", "tired", "focused"], ["calm_down", "focus", "rest", "sleep"]),
-    ("s4", "Almost Blue", "Chet Baker", ["jazz"], ["night", "late_night"], ["rainy", "snowy", "foggy", "cloudy"], ["lonely", "sad", "focused", "calm"], ["calm_down", "focus", "sleep", "reflective"]),
-    ("s5", "Viva La Vida", "Coldplay", ["rock", "indie", "pop"], ["early_morning", "morning", "afternoon"], ["sunny", "windy", "stormy", "cloudy"], ["stressed", "frustrated", "tired", "happy"], ["energize", "confident", "excited_up"]),
-    ("s6", "Day 1 ◐", "HONNE", ["pop", "lofi"], ["early_morning", "morning", "afternoon", "sunset"], ["sunny", "clear_breeze", "partly_cloudy"], ["happy", "excited", "calm", "focused"], ["refresh", "focus", "energize"]),
-    ("s7", "BIRDS OF A FEATHER", "Billie Eilish", ["pop"], ["morning", "afternoon", "sunset"], ["sunny", "clear_breeze", "partly_cloudy", "windy"], ["happy", "excited", "stressed", "frustrated"], ["refresh", "excited_up", "energize"]),
-    ("s8", "Leave The Door Open", "Silk Sonic", ["rnb", "soul"], ["sunset", "night"], ["clear_breeze", "partly_cloudy", "windy"], ["drowsy", "calm", "excited", "tired"], ["calm_down", "refresh", "rest"]),
-    ("s9", "Easily", "Bruno Major", ["rnb", "acoustic"], ["night", "late_night"], ["rainy", "drizzle", "cloudy", "snowy"], ["lonely", "sad", "tired", "calm"], ["comfort", "rest", "sleep", "reflective"]),
-    ("s10", "Best Part (feat. H.E.R.)", "Daniel Caesar", ["rnb", "soul"], ["early_morning", "sunset", "night"], ["clear_breeze", "sunny", "partly_cloudy"], ["calm", "excited", "happy", "drowsy"], ["comfort", "rest", "calm_down"]),
-    ("s11", "Easy", "Mac Ayres", ["rnb", "lofi"], ["afternoon", "sunset", "late_night"], ["drizzle", "cloudy", "foggy", "rainy"], ["drowsy", "tired", "calm", "focused"], ["rest", "calm_down", "focus"]),
-    ("s12", "Slow Dancing in a Burning Room", "John Mayer", ["rock", "indie"], ["sunset", "night", "late_night"], ["cloudy", "rainy", "foggy", "windy"], ["sad", "lonely", "stressed"], ["reflective", "comfort", "calm_down"]),
-    ("s13", "Apocalypse", "Cigarettes After Sex", ["indie", "ambient"], ["night", "late_night"], ["foggy", "rainy", "snowy", "stormy"], ["lonely", "sad", "calm", "focused"], ["reflective", "sleep", "calm_down"]),
-    ("s14", "Pink + White", "Frank Ocean", ["rnb", "hiphop"], ["morning", "afternoon", "sunset"], ["sunny", "clear_breeze", "partly_cloudy"], ["calm", "happy", "drowsy", "excited"], ["refresh", "rest", "reflective"]),
-    ("s15", "Cruel Summer", "Taylor Swift", ["pop"], ["afternoon", "sunset"], ["sunny", "clear_breeze", "windy"], ["happy", "excited", "frustrated", "stressed"], ["excited_up", "energize", "refresh"]),
-    ("s16", "Don't Stop Me Now", "Queen", ["rock", "pop"], ["early_morning", "morning", "afternoon"], ["sunny", "windy", "partly_cloudy"], ["happy", "tired", "stressed", "frustrated"], ["energize", "excited_up", "confident"]),
-    ("s17", "Merry Christmas Mr. Lawrence", "Ryuichi Sakamoto", ["ambient"], ["early_morning", "night", "late_night"], ["snowy", "foggy", "cloudy"], ["focused", "calm", "lonely", "sad"], ["focus", "sleep", "calm_down", "reflective"]),
-    ("s18", "Matsuri", "Fujii Kaze", ["citypop", "pop"], ["morning", "afternoon", "sunset"], ["sunny", "clear_breeze", "windy"], ["stressed", "frustrated", "happy", "drowsy"], ["refresh", "excited_up", "energize"]),
-    ("s19", "River Flows in You", "이루마 (Yiruma)", ["ambient"], ["early_morning", "night", "late_night"], ["rainy", "snowy", "drizzle", "foggy"], ["focused", "tired", "calm", "sad"], ["focus", "sleep", "rest", "calm_down"]),
-    ("s20", "비 오는 날 듣기 좋은 노래 (Feat. Colde)", "에픽하이 (EPIK HIGH)", ["kpop", "hiphop"], ["afternoon", "sunset", "night"], ["rainy", "drizzle", "cloudy", "foggy"], ["sad", "lonely", "tired", "calm"], ["comfort", "calm_down", "reflective"]),
-    ("s21", "비도 오고 그래서 (Feat. 신용재)", "헤이즈 (Heize)", ["kpop", "rnb"], ["sunset", "night", "late_night"], ["rainy", "stormy", "drizzle"], ["sad", "lonely", "tired"], ["comfort", "reflective", "calm_down"]),
-    ("s22", "한 페이지가 될 수 있게", "데이식스 (DAY6)", ["kpop", "rock"], ["early_morning", "morning", "afternoon"], ["sunny", "clear_breeze", "partly_cloudy", "windy"], ["happy", "excited", "tired", "stressed"], ["energize", "excited_up", "refresh", "confident"]),
-    ("s23", "사건의 지평선", "윤하", ["kpop", "rock"], ["afternoon", "sunset", "night"], ["sunny", "windy", "stormy", "cloudy"], ["sad", "stressed", "frustrated", "happy"], ["energize", "confident", "refresh"]),
-    ("s24", "밤편지", "아이유 (IU)", ["kpop", "acoustic"], ["night", "late_night"], ["snowy", "rainy", "cloudy", "clear_breeze"], ["calm", "tired", "lonely", "sad"], ["comfort", "rest", "sleep", "calm_down"]),
-    ("s25", "Square (2017)", "백예린", ["kpop", "indie", "rnb"], ["morning", "afternoon", "sunset"], ["sunny", "clear_breeze", "partly_cloudy", "windy"], ["happy", "excited", "calm", "frustrated"], ["refresh", "comfort", "excited_up"]),
-    ("s26", "EVERYTHING", "검정치마", ["kpop", "indie"], ["night", "late_night"], ["snowy", "rainy", "foggy", "cloudy"], ["calm", "lonely", "sad", "focused"], ["calm_down", "sleep", "rest", "reflective"]),
-    ("s27", "Put Your Records On", "Corinne Bailey Rae", ["soul", "acoustic"], ["morning", "afternoon"], ["sunny", "clear_breeze", "partly_cloudy"], ["calm", "happy", "drowsy"], ["refresh", "comfort", "rest"]),
-    ("s28", "Sunday Morning", "Maroon 5", ["pop"], ["early_morning", "morning"], ["rainy", "drizzle", "sunny", "clear_breeze"], ["calm", "drowsy", "happy"], ["rest", "refresh", "calm_down"]),
-    ("s29", "Come Away With Me", "Norah Jones", ["jazz"], ["night", "late_night", "sunset"], ["rainy", "drizzle", "cloudy", "foggy"], ["tired", "calm", "lonely"], ["sleep", "rest", "comfort"]),
-    ("s30", "Fly Me to the Moon", "Frank Sinatra", ["jazz", "pop"], ["sunset", "night"], ["clear_breeze", "sunny", "partly_cloudy"], ["happy", "excited", "calm"], ["refresh", "rest", "excited_up"]),
-    ("s31", "Vienna", "Billy Joel", ["pop", "acoustic"], ["sunset", "night", "late_night"], ["cloudy", "windy", "rainy"], ["stressed", "frustrated", "tired", "sad"], ["comfort", "calm_down", "reflective"]),
-    ("s32", "Fix You", "Coldplay", ["rock", "pop"], ["night", "late_night", "sunset"], ["rainy", "stormy", "cloudy", "snowy"], ["sad", "lonely", "tired"], ["comfort", "reflective", "confident"]),
-    ("s33", "Nights", "Frank Ocean", ["rnb", "hiphop"], ["night", "late_night"], ["foggy", "rainy", "windy"], ["focused", "lonely", "stressed"], ["reflective", "focus", "calm_down"]),
-    ("s34", "Plastic Love", "Mariya Takeuchi", ["citypop", "pop"], ["sunset", "night"], ["rainy", "clear_breeze", "windy"], ["drowsy", "lonely", "excited"], ["refresh", "excited_up", "reflective"]),
-    ("s35", "Clair de Lune", "Claude Debussy", ["classical", "ambient"], ["early_morning", "late_night", "night"], ["snowy", "foggy", "drizzle"], ["calm", "focused", "tired"], ["sleep", "focus", "calm_down", "rest"]),
-    ("s36", "Isn't She Lovely", "Stevie Wonder", ["soul", "pop"], ["morning", "afternoon"], ["sunny", "clear_breeze"], ["happy", "excited"], ["excited_up", "energize", "refresh"]),
-    ("s37", "Golden Hour", "JVKE", ["pop"], ["sunset", "afternoon"], ["sunny", "clear_breeze", "partly_cloudy"], ["excited", "happy", "calm"], ["reflective", "comfort", "excited_up"]),
-    ("s38", "주저하는 연인들을 위해", "잔나비", ["kpop", "indie"], ["sunset", "night"], ["windy", "cloudy", "foggy"], ["sad", "lonely", "calm"], ["reflective", "comfort", "calm_down"]),
-    ("s39", "Ditto", "뉴진스 (NewJeans)", ["kpop"], ["afternoon", "sunset", "night"], ["snowy", "cloudy", "partly_cloudy"], ["calm", "drowsy", "focused"], ["refresh", "focus", "reflective"]),
-    ("s40", "봄날", "방탄소년단 (BTS)", ["kpop", "hiphop"], ["early_morning", "sunset", "night"], ["snowy", "cloudy", "windy"], ["sad", "lonely", "tired"], ["comfort", "refresh", "confident"]),
-    ("s41", "Nocturne Op.9 No.2", "Frédéric Chopin", ["classical"], ["early_morning", "night", "late_night"], ["rainy", "snowy", "foggy", "cloudy"], ["calm", "lonely", "sad", "focused"], ["sleep", "calm_down", "focus", "rest"]),
-    ("s42", "Gymnopédie No.1", "Erik Satie", ["classical", "ambient"], ["early_morning", "afternoon", "late_night"], ["drizzle", "rainy", "foggy", "snowy"], ["tired", "calm", "drowsy", "focused"], ["rest", "sleep", "calm_down", "focus"]),
-    ("s43", "Summer", "Joe Hisaishi", ["ambient", "lofi"], ["morning", "afternoon"], ["sunny", "clear_breeze", "partly_cloudy"], ["happy", "excited", "calm"], ["refresh", "comfort", "energize"]),
-    ("s44", "Ride on Time", "Tatsuro Yamashita", ["citypop"], ["morning", "afternoon", "sunset"], ["sunny", "clear_breeze", "windy"], ["happy", "excited", "tired"], ["energize", "excited_up", "refresh"]),
-    ("s45", "Remember Summer Days", "Anri", ["citypop"], ["afternoon", "sunset", "night"], ["sunny", "clear_breeze", "partly_cloudy"], ["happy", "drowsy", "calm"], ["refresh", "excited_up", "reflective"]),
-    ("s46", "Aruarian Dance", "Nujabes", ["lofi", "hiphop"], ["afternoon", "night", "late_night"], ["rainy", "cloudy", "clear_breeze"], ["focused", "calm", "tired"], ["focus", "calm_down", "rest"]),
-    ("s47", "Affection", "Jinsang", ["lofi"], ["early_morning", "night", "late_night"], ["rainy", "drizzle", "snowy"], ["drowsy", "calm", "focused"], ["focus", "sleep", "rest"]),
-    ("s48", "Controlla", "Idealism", ["lofi", "ambient"], ["night", "late_night"], ["rainy", "foggy", "snowy"], ["lonely", "tired", "focused"], ["sleep", "calm_down", "focus"]),
-    ("s49", "Luv(sic) pt.3 (feat. Shing02)", "Nujabes", ["hiphop", "lofi"], ["sunset", "night", "late_night"], ["rainy", "cloudy", "windy"], ["lonely", "calm", "focused"], ["reflective", "comfort", "focus"]),
-    ("s50", "I'm Yours", "Jason Mraz", ["acoustic"], ["morning", "afternoon"], ["sunny", "clear_breeze", "partly_cloudy"], ["happy", "calm", "stressed"], ["refresh", "comfort", "rest"]),
-    ("s51", "Cello Suite No.1 in G Major, BWV 1007: I. Prélude", "Johann Sebastian Bach", ["classical"], ["early_morning", "morning", "afternoon", "night"], ["sunny", "clear_breeze", "cloudy", "rainy"], ["calm", "focused", "tired"], ["focus", "calm_down", "rest"]),
-    ("s52", "Piano Sonata No.14 'Moonlight': I. Adagio sostenuto", "Ludwig van Beethoven", ["classical"], ["night", "late_night", "sunset"], ["rainy", "snowy", "foggy", "cloudy"], ["sad", "lonely", "focused", "calm"], ["reflective", "sleep", "calm_down", "focus"]),
-    ("s53", "The Four Seasons: Spring, Op.8 No.1: I. Allegro", "Antonio Vivaldi", ["classical"], ["early_morning", "morning", "afternoon"], ["sunny", "clear_breeze", "partly_cloudy"], ["happy", "excited", "drowsy"], ["energize", "refresh", "excited_up"]),
-    ("s54", "Liebestraum No.3 in A-Flat Major, S.541", "Franz Liszt", ["classical"], ["sunset", "night", "late_night"], ["clear_breeze", "rainy", "snowy", "cloudy"], ["calm", "lonely", "sad", "excited"], ["comfort", "reflective", "rest"]),
-    ("s55", "Pavane pour une infante défunte", "Maurice Ravel", ["classical"], ["early_morning", "sunset", "late_night"], ["drizzle", "foggy", "rainy", "snowy"], ["tired", "calm", "drowsy", "sad"], ["calm_down", "sleep", "rest", "comfort"]),
-    ("s56", "Swan Lake, Op.20: Scene (Moderato)", "Pyotr Ilyich Tchaikovsky", ["classical"], ["sunset", "night"], ["snowy", "windy", "cloudy", "stormy"], ["stressed", "frustrated", "sad", "focused"], ["reflective", "confident", "comfort"]),
-    ("s57", "Piano Concerto No.21 in C Major, K.467: II. Andante", "Wolfgang Amadeus Mozart", ["classical"], ["early_morning", "morning", "afternoon"], ["sunny", "clear_breeze", "partly_cloudy"], ["calm", "happy", "focused"], ["calm_down", "focus", "rest", "comfort"]),
-    ("s58", "Violin Concerto in E Minor, Op.64: I. Allegro molto appassionato", "Felix Mendelssohn", ["classical"], ["morning", "afternoon", "sunset"], ["windy", "clear_breeze", "cloudy"], ["excited", "stressed", "focused"], ["energize", "confident", "reflective"]),
-    ("s59", "Cello Concerto in E Minor, Op.85: I. Adagio - Moderato", "Edward Elgar", ["classical"], ["sunset", "night", "late_night"], ["rainy", "foggy", "cloudy", "windy"], ["sad", "lonely", "tired"], ["reflective", "comfort", "calm_down"]),
-    ("s60", "Symphony No.9 'From the New World': II. Largo", "Antonín Dvořák", ["classical"], ["early_morning", "sunset", "night"], ["cloudy", "clear_breeze", "snowy"], ["tired", "calm", "lonely"], ["comfort", "rest", "reflective"]),
-    ("s61", "Étude in C-Sharp Minor, Op.2 No.1", "Alexander Scriabin", ["classical"], ["night", "late_night", "sunset"], ["rainy", "snowy", "foggy", "cloudy"], ["sad", "lonely", "focused"], ["reflective", "comfort", "calm_down"]),
-    ("s62", "Má vlast: Vltava (The Moldau)", "Bedřich Smetana", ["classical"], ["early_morning", "morning", "afternoon"], ["sunny", "clear_breeze", "windy"], ["calm", "excited", "happy"], ["refresh", "energize", "reflective"]),
-    ("s63", "An der schönen blauen Donau (The Blue Danube), Op.314", "Johann Strauss II", ["classical"], ["morning", "afternoon", "sunset"], ["sunny", "clear_breeze", "partly_cloudy"], ["happy", "excited", "drowsy"], ["excited_up", "refresh", "energize"]),
-    ("s64", "Morgen!, Op.27 No.4 (Orchestral Version)", "Richard Strauss", ["classical"], ["early_morning", "sunset", "night"], ["clear_breeze", "drizzle", "cloudy"], ["calm", "tired", "lonely"], ["comfort", "calm_down", "rest"]),
-    ("s65", "Superstition", "Stevie Wonder", ["soul"], ["morning", "afternoon"], ["sunny", "clear_breeze"], ["happy", "excited", "drowsy"], ["energize", "excited_up", "refresh"]),
-    ("s66", "What's Going On", "Marvin Gaye", ["soul"], ["sunset", "night"], ["cloudy", "rainy", "windy"], ["sad", "stressed", "focused"], ["comfort", "reflective", "calm_down"]),
-    ("s67", "Valerie", "Amy Winehouse", ["soul"], ["afternoon", "sunset", "night"], ["sunny", "clear_breeze", "partly_cloudy"], ["happy", "frustrated", "tired"], ["excited_up", "refresh", "energize"]),
-    ("s68", "Stay With Me", "Miki Matsubara", ["citypop"], ["sunset", "night", "late_night"], ["rainy", "clear_breeze", "windy"], ["lonely", "drowsy", "calm"], ["reflective", "refresh", "comfort"]),
-    ("s69", "4:00 A.M.", "Taeko Onuki", ["citypop"], ["night", "late_night"], ["foggy", "rainy", "cloudy"], ["lonely", "tired", "calm"], ["calm_down", "reflective", "sleep"]),
-    ("s70", "Midnight Pretenders", "Tomoko Aran", ["citypop"], ["night", "late_night"], ["clear_breeze", "cloudy", "rainy"], ["drowsy", "lonely", "focused"], ["reflective", "rest", "calm_down"]),
-    ("s71", "Feather", "Nujabes", ["lofi"], ["morning", "afternoon", "sunset"], ["sunny", "clear_breeze", "partly_cloudy"], ["focused", "calm", "happy"], ["focus", "refresh", "calm_down"]),
-    ("s72", "I'm Closing My Eyes", "potsu", ["lofi"], ["night", "late_night"], ["rainy", "drizzle", "snowy"], ["tired", "drowsy", "sad"], ["sleep", "rest", "calm_down"]),
-    ("s73", "Snowfall", "Øneheart & reidenshi", ["lofi"], ["early_morning", "night", "late_night"], ["snowy", "foggy", "rainy"], ["lonely", "tired", "focused"], ["sleep", "focus", "calm_down"]),
-    ("s74", "Better Together", "Jack Johnson", ["acoustic"], ["early_morning", "morning", "afternoon"], ["sunny", "clear_breeze", "partly_cloudy"], ["calm", "happy", "drowsy"], ["rest", "comfort", "refresh"]),
-    ("s75", "Gravity", "John Mayer", ["acoustic"], ["sunset", "night", "late_night"], ["rainy", "cloudy", "foggy"], ["sad", "stressed", "tired"], ["reflective", "comfort", "calm_down"]),
-    ("s76", "Photograph", "Ed Sheeran", ["acoustic"], ["sunset", "night"], ["snowy", "cloudy", "clear_breeze"], ["lonely", "sad", "calm"], ["comfort", "reflective", "rest"]),
-    ("s77", "별 보러 가자", "적재", ["acoustic", "kpop"], ["night", "late_night", "sunset"], ["clear_breeze", "sunny", "partly_cloudy"], ["calm", "excited", "lonely"], ["comfort", "rest", "calm_down"]),
-    ("s78", "Nuvole Bianche", "Ludovico Einaudi", ["ambient"], ["early_morning", "night", "late_night"], ["snowy", "rainy", "foggy", "cloudy"], ["focused", "sad", "calm"], ["focus", "sleep", "calm_down", "reflective"]),
-    ("s79", "On the Nature of Daylight", "Max Richter", ["ambient"], ["sunset", "night", "late_night"], ["rainy", "cloudy", "foggy"], ["sad", "lonely", "focused"], ["reflective", "comfort", "calm_down"]),
-    ("s80", "Autumn Leaves", "Chet Baker", ["jazz"], ["sunset", "night"], ["windy", "cloudy", "rainy"], ["calm", "lonely", "drowsy"], ["calm_down", "rest", "reflective"]),
-    ("s81", "From The Start", "Laufey", ["jazz"], ["morning", "afternoon", "sunset"], ["sunny", "clear_breeze", "partly_cloudy"], ["excited", "happy", "calm"], ["refresh", "excited_up", "comfort"]),
-    ("s82", "Sunflower", "Post Malone & Swae Lee", ["hiphop"], ["morning", "afternoon", "sunset"], ["sunny", "clear_breeze", "partly_cloudy"], ["happy", "excited", "tired"], ["energize", "refresh", "excited_up"]),
-    ("s83", "See You Again", "Tyler, The Creator (feat. Kali Uchis)", ["hiphop"], ["afternoon", "sunset"], ["sunny", "clear_breeze", "partly_cloudy"], ["excited", "happy", "drowsy"], ["refresh", "reflective", "comfort"]),
-    ("s84", "bad", "wave to earth", ["indie"], ["afternoon", "sunset", "night"], ["clear_breeze", "partly_cloudy", "drizzle"], ["calm", "drowsy", "happy"], ["calm_down", "rest", "refresh"]),
+    [
+        "c1",
+        "Symphony No.9 'From the New World': II. Largo",
+        "Antonín Dvořák",
+        [
+            "orchestra"
+        ],
+        [
+            "early_morning",
+            "sunset",
+            "night"
+        ],
+        [
+            "cloudy",
+            "clear_breeze",
+            "snowy"
+        ],
+        [
+            "tired",
+            "calm",
+            "lonely"
+        ],
+        [
+            "comfort",
+            "rest",
+            "reflective"
+        ]
+    ],
+    [
+        "c2",
+        "Má vlast: Vltava (The Moldau)",
+        "Bedřich Smetana",
+        [
+            "orchestra"
+        ],
+        [
+            "early_morning",
+            "morning",
+            "afternoon"
+        ],
+        [
+            "sunny",
+            "clear_breeze",
+            "windy"
+        ],
+        [
+            "calm",
+            "excited",
+            "happy"
+        ],
+        [
+            "refresh",
+            "energize",
+            "reflective"
+        ]
+    ],
+    [
+        "c3",
+        "An der schönen blauen Donau, Op.314",
+        "Johann Strauss II",
+        [
+            "orchestra"
+        ],
+        [
+            "morning",
+            "afternoon",
+            "sunset"
+        ],
+        [
+            "sunny",
+            "clear_breeze",
+            "partly_cloudy"
+        ],
+        [
+            "happy",
+            "excited",
+            "drowsy"
+        ],
+        [
+            "excited_up",
+            "refresh",
+            "energize"
+        ]
+    ],
+    [
+        "c4",
+        "Symphony No.5 in C-Sharp Minor: IV. Adagietto",
+        "Gustav Mahler",
+        [
+            "orchestra"
+        ],
+        [
+            "sunset",
+            "night",
+            "late_night"
+        ],
+        [
+            "rainy",
+            "foggy",
+            "cloudy"
+        ],
+        [
+            "sad",
+            "lonely",
+            "tired"
+        ],
+        [
+            "reflective",
+            "comfort",
+            "calm_down"
+        ]
+    ],
+    [
+        "c5",
+        "Swan Lake, Op.20: Scene (Moderato)",
+        "Pyotr Ilyich Tchaikovsky",
+        [
+            "orchestra"
+        ],
+        [
+            "sunset",
+            "night"
+        ],
+        [
+            "snowy",
+            "windy",
+            "cloudy",
+            "stormy"
+        ],
+        [
+            "stressed",
+            "frustrated",
+            "sad",
+            "focused"
+        ],
+        [
+            "reflective",
+            "confident",
+            "comfort"
+        ]
+    ],
+    [
+        "c6",
+        "Nocturne Op.9 No.2 in E-Flat Major",
+        "Frédéric Chopin",
+        [
+            "piano"
+        ],
+        [
+            "night",
+            "late_night",
+            "early_morning"
+        ],
+        [
+            "rainy",
+            "snowy",
+            "foggy",
+            "cloudy"
+        ],
+        [
+            "calm",
+            "lonely",
+            "sad",
+            "focused"
+        ],
+        [
+            "sleep",
+            "calm_down",
+            "focus",
+            "rest"
+        ]
+    ],
+    [
+        "c7",
+        "Clair de Lune (Suite bergamasque)",
+        "Claude Debussy",
+        [
+            "piano"
+        ],
+        [
+            "early_morning",
+            "late_night",
+            "night"
+        ],
+        [
+            "snowy",
+            "foggy",
+            "drizzle"
+        ],
+        [
+            "calm",
+            "focused",
+            "tired"
+        ],
+        [
+            "sleep",
+            "focus",
+            "calm_down",
+            "rest"
+        ]
+    ],
+    [
+        "c8",
+        "Piano Sonata No.14 'Moonlight': I. Adagio sostenuto",
+        "Ludwig van Beethoven",
+        [
+            "piano"
+        ],
+        [
+            "night",
+            "late_night",
+            "sunset"
+        ],
+        [
+            "rainy",
+            "snowy",
+            "foggy",
+            "cloudy"
+        ],
+        [
+            "sad",
+            "lonely",
+            "focused",
+            "calm"
+        ],
+        [
+            "reflective",
+            "sleep",
+            "calm_down",
+            "focus"
+        ]
+    ],
+    [
+        "c9",
+        "Étude in C-Sharp Minor, Op.2 No.1",
+        "Alexander Scriabin",
+        [
+            "piano"
+        ],
+        [
+            "night",
+            "late_night",
+            "sunset"
+        ],
+        [
+            "rainy",
+            "snowy",
+            "foggy",
+            "cloudy"
+        ],
+        [
+            "sad",
+            "lonely",
+            "focused"
+        ],
+        [
+            "reflective",
+            "comfort",
+            "calm_down"
+        ]
+    ],
+    [
+        "c10",
+        "Gymnopédie No.1",
+        "Erik Satie",
+        [
+            "piano"
+        ],
+        [
+            "early_morning",
+            "afternoon",
+            "late_night"
+        ],
+        [
+            "drizzle",
+            "rainy",
+            "foggy",
+            "snowy"
+        ],
+        [
+            "tired",
+            "calm",
+            "drowsy",
+            "focused"
+        ],
+        [
+            "rest",
+            "sleep",
+            "calm_down",
+            "focus"
+        ]
+    ],
+    [
+        "c11",
+        "Liebestraum No.3 in A-Flat Major, S.541",
+        "Franz Liszt",
+        [
+            "piano"
+        ],
+        [
+            "sunset",
+            "night",
+            "late_night"
+        ],
+        [
+            "clear_breeze",
+            "rainy",
+            "snowy",
+            "cloudy"
+        ],
+        [
+            "calm",
+            "lonely",
+            "sad",
+            "excited"
+        ],
+        [
+            "comfort",
+            "reflective",
+            "rest"
+        ]
+    ],
+    [
+        "c12",
+        "Pavane pour une infante défunte",
+        "Maurice Ravel",
+        [
+            "piano"
+        ],
+        [
+            "early_morning",
+            "sunset",
+            "late_night"
+        ],
+        [
+            "drizzle",
+            "foggy",
+            "rainy",
+            "snowy"
+        ],
+        [
+            "tired",
+            "calm",
+            "drowsy",
+            "sad"
+        ],
+        [
+            "calm_down",
+            "sleep",
+            "rest",
+            "comfort"
+        ]
+    ],
+    [
+        "c13",
+        "Cello Suite No.1 in G Major, BWV 1007: I. Prélude",
+        "Johann Sebastian Bach",
+        [
+            "strings"
+        ],
+        [
+            "early_morning",
+            "morning",
+            "afternoon",
+            "night"
+        ],
+        [
+            "sunny",
+            "clear_breeze",
+            "cloudy",
+            "rainy"
+        ],
+        [
+            "calm",
+            "focused",
+            "tired"
+        ],
+        [
+            "focus",
+            "calm_down",
+            "rest"
+        ]
+    ],
+    [
+        "c14",
+        "Thaïs: Méditation",
+        "Jules Massenet",
+        [
+            "strings"
+        ],
+        [
+            "sunset",
+            "night",
+            "late_night"
+        ],
+        [
+            "rainy",
+            "drizzle",
+            "foggy"
+        ],
+        [
+            "sad",
+            "tired",
+            "lonely"
+        ],
+        [
+            "comfort",
+            "calm_down",
+            "rest"
+        ]
+    ],
+    [
+        "c15",
+        "Caprice No.24 in A Minor, Op.1",
+        "Niccolò Paganini",
+        [
+            "strings"
+        ],
+        [
+            "morning",
+            "afternoon"
+        ],
+        [
+            "sunny",
+            "windy",
+            "stormy"
+        ],
+        [
+            "stressed",
+            "frustrated",
+            "focused"
+        ],
+        [
+            "energize",
+            "confident",
+            "excited_up"
+        ]
+    ],
+    [
+        "c16",
+        "Le Cygne (The Swan) from Carnival of the Animals",
+        "Camille Saint-Saëns",
+        [
+            "strings"
+        ],
+        [
+            "early_morning",
+            "sunset",
+            "night"
+        ],
+        [
+            "snowy",
+            "clear_breeze",
+            "drizzle"
+        ],
+        [
+            "calm",
+            "drowsy",
+            "sad"
+        ],
+        [
+            "calm_down",
+            "rest",
+            "sleep"
+        ]
+    ],
+    [
+        "c17",
+        "Clarinet Concerto in A Major, K.622: II. Adagio",
+        "Wolfgang Amadeus Mozart",
+        [
+            "winds"
+        ],
+        [
+            "sunset",
+            "night",
+            "late_night"
+        ],
+        [
+            "rainy",
+            "cloudy",
+            "foggy"
+        ],
+        [
+            "tired",
+            "calm",
+            "lonely"
+        ],
+        [
+            "comfort",
+            "calm_down",
+            "sleep"
+        ]
+    ],
+    [
+        "c18",
+        "Prélude à l'après-midi d'un faune",
+        "Claude Debussy",
+        [
+            "winds"
+        ],
+        [
+            "afternoon",
+            "sunset"
+        ],
+        [
+            "clear_breeze",
+            "partly_cloudy",
+            "foggy"
+        ],
+        [
+            "drowsy",
+            "calm",
+            "focused"
+        ],
+        [
+            "rest",
+            "reflective",
+            "calm_down"
+        ]
+    ],
+    [
+        "c19",
+        "Orfeo ed Euridice: Dance of the Blessed Spirits (Flute)",
+        "Christoph Willibald Gluck",
+        [
+            "winds"
+        ],
+        [
+            "early_morning",
+            "morning"
+        ],
+        [
+            "clear_breeze",
+            "sunny",
+            "drizzle"
+        ],
+        [
+            "calm",
+            "tired"
+        ],
+        [
+            "calm_down",
+            "rest",
+            "comfort"
+        ]
+    ],
+    [
+        "c20",
+        "Horn Concerto No.4 in E-Flat Major, K.495: III. Rondo",
+        "Wolfgang Amadeus Mozart",
+        [
+            "winds"
+        ],
+        [
+            "morning",
+            "afternoon"
+        ],
+        [
+            "sunny",
+            "clear_breeze",
+            "windy"
+        ],
+        [
+            "happy",
+            "excited",
+            "drowsy"
+        ],
+        [
+            "refresh",
+            "energize",
+            "excited_up"
+        ]
+    ],
+    [
+        "c21",
+        "Sonata for Two Pianos and Percussion, Sz.110: I. Assai lento",
+        "Béla Bartók",
+        [
+            "percussion"
+        ],
+        [
+            "afternoon",
+            "night"
+        ],
+        [
+            "stormy",
+            "windy",
+            "cloudy"
+        ],
+        [
+            "focused",
+            "stressed",
+            "frustrated"
+        ],
+        [
+            "focus",
+            "confident",
+            "energize"
+        ]
+    ],
+    [
+        "c22",
+        "Concerto for Marimba and Vibraphone",
+        "Darius Milhaud",
+        [
+            "percussion"
+        ],
+        [
+            "morning",
+            "afternoon"
+        ],
+        [
+            "sunny",
+            "partly_cloudy"
+        ],
+        [
+            "happy",
+            "drowsy",
+            "focused"
+        ],
+        [
+            "refresh",
+            "energize",
+            "focus"
+        ]
+    ],
+    [
+        "c23",
+        "Symphony No.94 'Surprise': II. Andante (Timpani)",
+        "Joseph Haydn",
+        [
+            "percussion"
+        ],
+        [
+            "morning",
+            "afternoon"
+        ],
+        [
+            "sunny",
+            "clear_breeze"
+        ],
+        [
+            "drowsy",
+            "happy",
+            "calm"
+        ],
+        [
+            "refresh",
+            "excited_up",
+            "energize"
+        ]
+    ],
+    [
+        "c24",
+        "The Nutcracker: Dance of the Sugar Plum Fairy (Celesta)",
+        "Pyotr Ilyich Tchaikovsky",
+        [
+            "percussion"
+        ],
+        [
+            "night",
+            "early_morning"
+        ],
+        [
+            "snowy",
+            "foggy"
+        ],
+        [
+            "excited",
+            "calm",
+            "happy"
+        ],
+        [
+            "refresh",
+            "rest",
+            "sleep"
+        ]
+    ],
+    [
+        "c25",
+        "String Quartet No.12 'American': II. Lento",
+        "Antonín Dvořák",
+        [
+            "chamber"
+        ],
+        [
+            "sunset",
+            "night"
+        ],
+        [
+            "clear_breeze",
+            "rainy",
+            "cloudy"
+        ],
+        [
+            "lonely",
+            "calm",
+            "tired"
+        ],
+        [
+            "comfort",
+            "reflective",
+            "rest"
+        ]
+    ],
+    [
+        "c26",
+        "Piano Trio No.2 in E-Flat Major, D.929: II. Andante con moto",
+        "Franz Schubert",
+        [
+            "chamber"
+        ],
+        [
+            "sunset",
+            "night",
+            "late_night"
+        ],
+        [
+            "rainy",
+            "cloudy",
+            "foggy"
+        ],
+        [
+            "sad",
+            "lonely",
+            "focused"
+        ],
+        [
+            "reflective",
+            "comfort",
+            "focus"
+        ]
+    ],
+    [
+        "c27",
+        "String Quartet No.14 'Death and the Maiden': II. Andante",
+        "Franz Schubert",
+        [
+            "chamber"
+        ],
+        [
+            "night",
+            "late_night"
+        ],
+        [
+            "stormy",
+            "rainy",
+            "snowy"
+        ],
+        [
+            "sad",
+            "stressed",
+            "lonely"
+        ],
+        [
+            "reflective",
+            "calm_down"
+        ]
+    ],
+    [
+        "c28",
+        "String Quintet in E Major, Op.11 No.5: III. Minuetto",
+        "Luigi Boccherini",
+        [
+            "chamber"
+        ],
+        [
+            "morning",
+            "afternoon"
+        ],
+        [
+            "sunny",
+            "clear_breeze",
+            "partly_cloudy"
+        ],
+        [
+            "happy",
+            "calm",
+            "drowsy"
+        ],
+        [
+            "refresh",
+            "excited_up",
+            "rest"
+        ]
+    ],
+    [
+        "c29",
+        "Piano Concerto No.21 in C Major, K.467: II. Andante",
+        "Wolfgang Amadeus Mozart",
+        [
+            "concerto"
+        ],
+        [
+            "early_morning",
+            "morning",
+            "afternoon"
+        ],
+        [
+            "sunny",
+            "clear_breeze",
+            "partly_cloudy"
+        ],
+        [
+            "calm",
+            "happy",
+            "focused"
+        ],
+        [
+            "calm_down",
+            "focus",
+            "rest",
+            "comfort"
+        ]
+    ],
+    [
+        "c30",
+        "Violin Concerto in E Minor, Op.64: I. Allegro molto appassionato",
+        "Felix Mendelssohn",
+        [
+            "concerto"
+        ],
+        [
+            "morning",
+            "afternoon",
+            "sunset"
+        ],
+        [
+            "windy",
+            "clear_breeze",
+            "cloudy"
+        ],
+        [
+            "excited",
+            "stressed",
+            "focused"
+        ],
+        [
+            "energize",
+            "confident",
+            "reflective"
+        ]
+    ],
+    [
+        "c31",
+        "Cello Concerto in E Minor, Op.85: I. Adagio - Moderato",
+        "Edward Elgar",
+        [
+            "concerto"
+        ],
+        [
+            "sunset",
+            "night",
+            "late_night"
+        ],
+        [
+            "rainy",
+            "foggy",
+            "cloudy",
+            "windy"
+        ],
+        [
+            "sad",
+            "lonely",
+            "tired"
+        ],
+        [
+            "reflective",
+            "comfort",
+            "calm_down"
+        ]
+    ],
+    [
+        "c32",
+        "Piano Concerto No.2 in C Minor, Op.18: II. Adagio sostenuto",
+        "Sergei Rachmaninoff",
+        [
+            "concerto"
+        ],
+        [
+            "sunset",
+            "night",
+            "late_night"
+        ],
+        [
+            "snowy",
+            "rainy",
+            "cloudy"
+        ],
+        [
+            "sad",
+            "lonely",
+            "tired"
+        ],
+        [
+            "comfort",
+            "reflective",
+            "rest"
+        ]
+    ],
+    [
+        "c33",
+        "Turandot: Nessun dorma",
+        "Giacomo Puccini",
+        [
+            "opera"
+        ],
+        [
+            "sunset",
+            "night"
+        ],
+        [
+            "sunny",
+            "windy",
+            "stormy"
+        ],
+        [
+            "stressed",
+            "frustrated",
+            "excited"
+        ],
+        [
+            "confident",
+            "energize",
+            "excited_up"
+        ]
+    ],
+    [
+        "c34",
+        "La Traviata: Brindisi (Libiamo ne' lieti calici)",
+        "Giuseppe Verdi",
+        [
+            "opera"
+        ],
+        [
+            "afternoon",
+            "sunset",
+            "night"
+        ],
+        [
+            "sunny",
+            "clear_breeze"
+        ],
+        [
+            "happy",
+            "excited"
+        ],
+        [
+            "excited_up",
+            "refresh",
+            "energize"
+        ]
+    ],
+    [
+        "c35",
+        "Carmen: Habanera",
+        "Georges Bizet",
+        [
+            "opera"
+        ],
+        [
+            "afternoon",
+            "sunset"
+        ],
+        [
+            "sunny",
+            "windy",
+            "partly_cloudy"
+        ],
+        [
+            "excited",
+            "stressed",
+            "happy"
+        ],
+        [
+            "confident",
+            "excited_up",
+            "refresh"
+        ]
+    ],
+    [
+        "c36",
+        "Gianni Schicchi: O mio babbino caro",
+        "Giacomo Puccini",
+        [
+            "opera"
+        ],
+        [
+            "early_morning",
+            "sunset",
+            "night"
+        ],
+        [
+            "clear_breeze",
+            "drizzle",
+            "cloudy"
+        ],
+        [
+            "calm",
+            "sad",
+            "lonely"
+        ],
+        [
+            "comfort",
+            "calm_down",
+            "rest"
+        ]
+    ],
+    [
+        "c37",
+        "Morgen!, Op.27 No.4",
+        "Richard Strauss",
+        [
+            "vocal"
+        ],
+        [
+            "early_morning",
+            "sunset",
+            "night"
+        ],
+        [
+            "clear_breeze",
+            "drizzle",
+            "cloudy"
+        ],
+        [
+            "calm",
+            "tired",
+            "lonely"
+        ],
+        [
+            "comfort",
+            "calm_down",
+            "rest"
+        ]
+    ],
+    [
+        "c38",
+        "Requiem in D Minor, K.626: Lacrimosa",
+        "Wolfgang Amadeus Mozart",
+        [
+            "vocal"
+        ],
+        [
+            "night",
+            "late_night"
+        ],
+        [
+            "stormy",
+            "rainy",
+            "foggy",
+            "cloudy"
+        ],
+        [
+            "sad",
+            "lonely",
+            "stressed"
+        ],
+        [
+            "reflective",
+            "comfort"
+        ]
+    ],
+    [
+        "c39",
+        "Erlkönig, D.328",
+        "Franz Schubert",
+        [
+            "vocal"
+        ],
+        [
+            "night",
+            "afternoon"
+        ],
+        [
+            "stormy",
+            "windy",
+            "foggy"
+        ],
+        [
+            "stressed",
+            "frustrated",
+            "focused"
+        ],
+        [
+            "energize",
+            "confident",
+            "reflective"
+        ]
+    ],
+    [
+        "c40",
+        "Stabat Mater: Quando corpus morietur",
+        "Giovanni Battista Pergolesi",
+        [
+            "vocal"
+        ],
+        [
+            "early_morning",
+            "night",
+            "late_night"
+        ],
+        [
+            "rainy",
+            "snowy",
+            "cloudy"
+        ],
+        [
+            "sad",
+            "tired",
+            "calm"
+        ],
+        [
+            "calm_down",
+            "comfort",
+            "sleep"
+        ]
+    ],
+    [
+        "c41",
+        "The Four Seasons: Spring, Op.8 No.1: I. Allegro",
+        "Antonio Vivaldi",
+        [
+            "baroque"
+        ],
+        [
+            "early_morning",
+            "morning",
+            "afternoon"
+        ],
+        [
+            "sunny",
+            "clear_breeze",
+            "partly_cloudy"
+        ],
+        [
+            "happy",
+            "excited",
+            "drowsy"
+        ],
+        [
+            "energize",
+            "refresh",
+            "excited_up"
+        ]
+    ],
+    [
+        "c42",
+        "Goldberg Variations, BWV 988: Aria",
+        "Johann Sebastian Bach",
+        [
+            "baroque"
+        ],
+        [
+            "early_morning",
+            "night",
+            "late_night"
+        ],
+        [
+            "snowy",
+            "drizzle",
+            "cloudy",
+            "foggy"
+        ],
+        [
+            "calm",
+            "tired",
+            "focused"
+        ],
+        [
+            "sleep",
+            "calm_down",
+            "focus",
+            "rest"
+        ]
+    ],
+    [
+        "c43",
+        "Canon and Gigue in D Major",
+        "Johann Pachelbel",
+        [
+            "baroque"
+        ],
+        [
+            "morning",
+            "afternoon",
+            "sunset"
+        ],
+        [
+            "sunny",
+            "clear_breeze",
+            "partly_cloudy"
+        ],
+        [
+            "calm",
+            "happy",
+            "tired"
+        ],
+        [
+            "comfort",
+            "calm_down",
+            "rest"
+        ]
+    ],
+    [
+        "c44",
+        "Water Music Suite No.2 in D Major: Alla Hornpipe",
+        "George Frideric Handel",
+        [
+            "baroque"
+        ],
+        [
+            "morning",
+            "afternoon"
+        ],
+        [
+            "sunny",
+            "windy",
+            "clear_breeze"
+        ],
+        [
+            "happy",
+            "excited",
+            "drowsy"
+        ],
+        [
+            "energize",
+            "excited_up",
+            "confident"
+        ]
+    ]
 ]
 
 
@@ -485,8 +1705,13 @@ async def sync_musicbrainz_into_db(genre: str, fav_artists: List[str]) -> int:
         taste_tags = await fetch_artist_tags(pick_fav)
         if taste_tags:
             queries.append((f'tag:"{random.choice(taste_tags)}"', random.randint(0, 120)))
-    chosen_tag = random.choice(tags)
-    queries.append((f'tag:"{chosen_tag}" AND status:official', random.randint(0, 300)))
+    if True:
+        composers = ["Johann Sebastian Bach", "Antonio Vivaldi", "George Frideric Handel", "Domenico Scarlatti", "Alessandro Scarlatti", "Henry Purcell", "Arcangelo Corelli", "Georg Philipp Telemann", "Jean-Philippe Rameau", "Claudio Monteverdi", "Tomaso Albinoni", "Dieterich Buxtehude", "Johann Pachelbel", "Giovanni Battista Pergolesi", "François Couperin", "Jean-Baptiste Lully", "Giuseppe Tartini", "Alessandro Marcello", "Benedetto Marcello", "Pietro Locatelli", "Sylvius Leopold Weiss", "Heinrich Ignaz Franz Biber", "Wolfgang Amadeus Mozart", "Ludwig van Beethoven", "Joseph Haydn", "Christoph Willibald Gluck", "Muzio Clementi", "Luigi Boccherini", "Carl Philipp Emanuel Bach", "Johann Christian Bach", "Carl Stamitz", "Antonio Salieri", "Johann Nepomuk Hummel", "Carl Czerny", "Friedrich Kuhlau", "Anton Diabelli", "Karl Ditters von Dittersdorf", "Giovanni Battista Viotti", "Louis Spohr", "Frédéric Chopin", "Franz Schubert", "Robert Schumann", "Clara Schumann", "Franz Liszt", "Johannes Brahms", "Felix Mendelssohn", "Fanny Mendelssohn", "Pyotr Ilyich Tchaikovsky", "Sergei Rachmaninoff", "Alexander Scriabin", "Bedřich Smetana", "Antonín Dvořák", "Richard Strauss", "Johann Strauss II", "Johann Strauss I", "Josef Strauss", "Gustav Mahler", "Hector Berlioz", "Georges Bizet", "Camille Saint-Saëns", "Gabriel Fauré", "César Franck", "Edvard Grieg", "Jean Sibelius", "Edward Elgar", "Niccolò Paganini", "Modest Mussorgsky", "Nikolai Rimsky-Korsakov", "Alexander Borodin", "Gioachino Rossini", "Giuseppe Verdi", "Giacomo Puccini", "Richard Wagner", "Anton Bruckner", "Max Bruch", "Pablo de Sarasate", "Henryk Wieniawski", "Isaac Albéniz", "Enrique Granados", "Vincenzo Bellini", "Gaetano Donizetti", "Charles-Valentin Alkan", "Sigismond Thalberg", "Giacomo Meyerbeer", "Charles Gounod", "Jacques Offenbach", "Édouard Lalo", "Ernest Chausson", "Paul Dukas", "Emmanuel Chabrier", "Jules Massenet", "Léo Delibes", "Henri Vieuxtemps", "Joseph Joachim", "Max Reger", "Ferruccio Busoni", "Hugo Wolf", "Alexander Glazunov", "Sergei Lyapunov", "Mily Balakirev", "César Cui", "Vasily Kalinnikov", "Anton Arensky", "Sergei Taneyev", "Anatoly Liadov", "Nikolai Medtner", "Leoš Janáček", "Josef Suk", "Zdeněk Fibich", "Bohuslav Martinů", "Zoltán Kodály", "George Enescu", "Carl Nielsen", "Johan Svendsen", "Hugo Alfvén", "Wilhelm Stenhammar", "Franz Berwald", "Franz Lehár", "Emmerich Kálmán", "Pietro Mascagni", "Ruggero Leoncavallo", "Claude Debussy", "Maurice Ravel", "Erik Satie", "Igor Stravinsky", "Sergei Prokofiev", "Dmitri Shostakovich", "Béla Bartók", "Gustav Holst", "Ralph Vaughan Williams", "Ottorino Respighi", "Manuel de Falla", "Samuel Barber", "Aaron Copland", "William Walton", "Benjamin Britten", "Frank Bridge", "Gerald Finzi", "Arnold Bax", "John Ireland", "Frederick Delius", "Joaquín Rodrigo", "Joaquín Turina", "Francisco Tárrega", "Agustín Barrios", "Fernando Sor", "Mauro Giuliani", "Matteo Carcassi", "Heitor Villa-Lobos", "Alberto Ginastera", "Manuel Ponce", "George Gershwin", "Leonard Bernstein", "Amy Beach", "Edward MacDowell", "Aram Khachaturian"]
+        comp = random.choice(composers)
+        queries.append((f'artist:"{comp}" AND status:official', random.randint(0, 120)))
+    else:
+        chosen_tag = random.choice(tags)
+        queries.append((f'tag:"{chosen_tag}" AND status:official', random.randint(0, 300)))
 
     recordings = []
     try:
@@ -524,6 +1749,12 @@ async def sync_musicbrainz_into_db(genre: str, fav_artists: List[str]) -> int:
         artist = "".join((c.get("name") or (c.get("artist") or {}).get("name") or "") + (c.get("joinphrase") or "") for c in credits).strip()
         if not title or not artist or artist == "[unknown]":
             continue
+        if genre == "classical":
+            if CLASSICAL_EXCLUDE_RE.search(f"{title} {artist}"):
+                continue
+            r_tags = [(t.get("name") or "").lower() for t in (r.get("tags") or [])]
+            if any(re.search(r"rock|pop|metal|jazz|hip hop|electronic|soundtrack|new age|ambient|punk|indie|folk|rnb|soul", rt) for rt in r_tags):
+                continue
         mb_id = f"mb_{r['id']}"
         genres = [genre] if genre != "all" else [chosen_tag]
         cur.execute(
@@ -541,57 +1772,8 @@ async def sync_musicbrainz_into_db(genre: str, fav_artists: List[str]) -> int:
     return added
 
 
-@lru_cache(maxsize=1)
-def classical_catalog():
-    # The HTML also runs directly from disk. Its embedded JSON is shared by both entry points.
-    page = FRONTEND_PATH.read_text(encoding="utf-8")
-    start = '<script id="classical-catalog" type="application/json">'
-    return json.loads(page.split(start, 1)[1].split("</script>", 1)[0])
-
-
-def recommend_classical(req: RecommendRequest):
-    catalog = classical_catalog()
-    excluded = set(req.excludeIds)
-    favorites = [name.lower() for name in req.favArtists if name]
-    candidates = []
-    for work in catalog["works"]:
-        profile = catalog["profiles"][work["profile"]]
-        if work["id"] in excluded or req.targetMood not in profile["target"]:
-            continue
-        score = (
-            3 * (req.currentMood in profile["current"])
-            + 2 * (req.timeOfDay in profile["times"])
-            + 2 * (req.weather in profile["weathers"])
-            + 4 * any(name in work["artist"].lower() for name in favorites)
-            + random.uniform(0, 2)
-        )
-        candidates.append((work, score))
-
-    # Read and update the rotation in one transaction, including concurrent API requests.
-    with closing(get_conn()) as conn, conn:
-        conn.execute("BEGIN IMMEDIATE")
-        history = dict(conn.execute("SELECT song_id, shown_at FROM recent_history"))
-        picked = []
-        composers = set()
-        for tier in ("familiar", "discovery", "familiar", "discovery"):
-            pool = [(work, score) for work, score in candidates if work["tier"] == tier and work not in picked]
-            if not pool:
-                continue
-            work, _ = min(pool, key=lambda item: (
-                history.get(item[0]["id"], ""), item[0]["artist"] in composers, -item[1]
-            ))
-            picked.append(work)
-            composers.add(work["artist"])
-        now = datetime.utcnow().isoformat()
-        conn.executemany("INSERT OR REPLACE INTO recent_history (song_id, shown_at) VALUES (?, ?)",
-                         [(work["id"], now) for work in picked])
-    return {"tracks": [{k: work[k] for k in ("id", "artist", "title", "tier")} for work in picked]}
-
-
 @app.post("/api/recommend")
 async def recommend(req: RecommendRequest):
-    if req.genre == "classical":
-        return recommend_classical(req)
     await sync_musicbrainz_into_db(req.genre, req.favArtists)
 
     conn = get_conn()
@@ -607,6 +1789,11 @@ async def recommend(req: RecommendRequest):
         genres = json.loads(r["genres"])
         if req.genre != "all" and req.genre not in genres:
             continue
+        if True:
+            if CLASSICAL_EXCLUDE_RE.search(f"{r['title']} {r['artist']}"):
+                continue
+            if not CLASSICAL_COMPOSER_WHITELIST_RE.search(r['artist']):
+                continue
         score = 0.0
         if req.timeOfDay in json.loads(r["times"]):
             score += 2.5
