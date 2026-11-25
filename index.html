@@ -2449,11 +2449,11 @@
         const recentIdx = Math.max(state.recentSongIds.indexOf(song.id), state.recentSongKeys.indexOf(normK));
         if (currentIds.has(song.id) || excludeKeys.includes(key)) penalty -= 500;
         else if (recentIdx !== -1) penalty -= (300 - recentIdx);
-        const jitter = Math.random() * 3.0;
+        const jitter = Math.random() * 8.0;
         return { song, total: score + penalty + jitter };
       });
       scored.sort((a, b) => b.total - a.total);
-      const topPool = scored.slice(0, 8).map(item => item.song);
+      const topPool = scored.slice(0, 22).map(item => item.song);
       for (let i = topPool.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [topPool[i], topPool[j]] = [topPool[j], topPool[i]];
@@ -2874,10 +2874,21 @@
 
         const actProf = ACTIVITY_CLASSICAL_PROFILE[state.activity] || ACTIVITY_CLASSICAL_PROFILE.all;
         const actWord = pickRand(actProf.words);
-        const cTime = pickRand(TIME_CLASSICAL_WORDS[state.timeOfDay] || ['prelude']);
-        const q1 = state.era === 'all' ? `${c1} ${actWord} ${cMood}` : `${c1} ${actWord}`;
-        const q2 = `${c2} ${cWeather} ${cTime}`;
-        const q3 = `${c3} ${cMood} ${actWord}`;
+        const majorComposers = [
+          "Johann Sebastian Bach", "Wolfgang Amadeus Mozart", "Ludwig van Beethoven", "Frédéric Chopin",
+          "Claude Debussy", "Maurice Ravel", "Pyotr Ilyich Tchaikovsky", "Antonio Vivaldi",
+          "Franz Schubert", "Johannes Brahms", "Robert Schumann", "Felix Mendelssohn",
+          "Sergei Rachmaninoff", "Edvard Grieg", "Camille Saint-Saëns", "Gabriel Fauré",
+          "George Frideric Handel", "Joseph Haydn", "Franz Liszt", "Gustav Mahler",
+          "Antonín Dvořák", "Jean Sibelius", "Edward Elgar", "Erik Satie",
+          "Dmitri Shostakovich", "Sergei Prokofiev", "Igor Stravinsky", "Giacomo Puccini",
+          "Giuseppe Verdi", "Richard Strauss", "César Franck", "Ottorino Respighi",
+          "Ralph Vaughan Williams", "Samuel Barber", "Aaron Copland", "Arvo Pärt"
+        ];
+        const mc1 = pickRand(majorComposers);
+        const q1 = `${mc1}`;
+        const q2 = `${c1}`;
+        const q3 = `${cMood} ${actWord}`;
 
         const mbQuery = state.genre === 'all'
           ? `artist:"${c1}" AND status:official`
@@ -2893,7 +2904,7 @@
           queryMusicBrainzRecordings(mbQuery, 40, Math.min(300, state.rerollDepth * 30))
         ]);
         baseTracks = [...oo1.slice(0, 3), ...it1.slice(0, 2), ...it2.slice(0, 2), ...it3.slice(0, 2), ...mb1, ...oo1.slice(3), ...it1.slice(2), ...it2.slice(2), ...it3.slice(2)];
-        baseTracks.sort((a, b) => (scoreTrackForContext(b) + Math.random() * 2.8) - (scoreTrackForContext(a) + Math.random() * 2.8));
+        baseTracks.sort((a, b) => (scoreTrackForContext(b) + Math.random() * 4.0) - (scoreTrackForContext(a) + Math.random() * 4.0));
       }
       // Blend: up to 2 direct artist tracks + up to 1 taste-tag track + mood/genre tracks
       const combined = [];
@@ -2993,7 +3004,7 @@
               return { song, total: score + penalty + Math.random() * 3.0 };
             });
             scored.sort((a, b) => b.total - a.total);
-            const topPool = scored.slice(0, 8).map(item => item.song);
+            const topPool = scored.slice(0, 22).map(item => item.song);
             for (let i = topPool.length - 1; i > 0; i--) {
               const j = Math.floor(Math.random() * (i + 1));
               [topPool[i], topPool[j]] = [topPool[j], topPool[i]];
