@@ -2837,7 +2837,22 @@
         const pickFav = state.favArtists[Math.floor(Math.random() * state.favArtists.length)];
         const favName = getFavName(pickFav);
         if (favName) {
-          artistTracks = await queryITunesTracks(favName, 25);
+          const [directRes, relTags] = await Promise.all([
+            queryITunesTracks(favName, 35),
+            fetchArtistRelatedTags(favName)
+          ]);
+          artistTracks = directRes.sort((a, b) => (scoreTrackForContext(b) + Math.random() * 2.0) - (scoreTrackForContext(a) + Math.random() * 2.0));
+          const cMood = pickRand(CLASSICAL_MOOD_WORDS[state.targetMood] || ['sonata']);
+          const simTag = relTags.length > 0 ? pickRand(relTags) : '';
+          if (simTag) {
+            const [simIt, simMb] = await Promise.all([
+              queryITunesTracks(`${simTag} ${cMood}`, 35),
+              queryMusicBrainzRecordings(`tag:"${simTag}" AND status:official`, 20, 0, true)
+            ]);
+            tasteTagTracks = [...simIt, ...simMb]
+              .filter(t => !t.artist.toLowerCase().includes(favName.toLowerCase()))
+              .sort((a, b) => (scoreTrackForContext(b) + Math.random() * 2.0) - (scoreTrackForContext(a) + Math.random() * 2.0));
+          }
         }
       }
 
@@ -2899,8 +2914,8 @@
         }
       };
 
-      pushUnique(artistTracks, 2);
-      pushUnique(tasteTagTracks, 1);
+      pushUnique(artistTracks, 1);
+      pushUnique(tasteTagTracks, 2);
       pushUnique(baseTracks, 4);
       return combined;
     }
@@ -3096,6 +3111,7 @@
       return {
         youtube: `https://music.youtube.com/search?q=${q}`,
         spotify: `https://open.spotify.com/search/${q}`,
+        apple: `https://music.apple.com/search?term=${q}`,
         melon: `https://www.melon.com/search/total/index.htm?q=${q}`
       };
     }
@@ -3239,19 +3255,22 @@
                     </button>
                   </div>
                 </div>
-
-                <div class="flex flex-wrap items-center gap-2 mt-3">
-                  <a href="${links.youtube}" target="_blank" rel="noopener noreferrer"
-                    class="touch-press px-3 py-2 rounded-xl text-xs font-semibold bg-red-50 text-red-700">
-                    YouTube Music ↗
+                <div class="flex items-center gap-1.5 mt-3">
+                  <a href="${links.youtube}" target="_blank" rel="noopener noreferrer" aria-label="YouTube Music에서 검색"
+                    class="touch-press flex-[1.25] py-1.5 px-1.5 rounded-xl text-[11px] font-semibold bg-red-50 text-red-700 text-center whitespace-nowrap">
+                    YT Music
                   </a>
                   <a href="${links.spotify}" target="_blank" rel="noopener noreferrer"
-                    class="touch-press px-3 py-2 rounded-xl text-xs font-semibold bg-emerald-50 text-emerald-700">
-                    Spotify ↗
+                    class="touch-press flex-1 py-1.5 px-1 rounded-xl text-[11px] font-semibold bg-emerald-50 text-emerald-700 text-center whitespace-nowrap">
+                    Spotify
+                  </a>
+                  <a href="${links.apple}" target="_blank" rel="noopener noreferrer"
+                    class="touch-press flex-1 py-1.5 px-1 rounded-xl text-[11px] font-semibold bg-rose-50 text-rose-700 text-center whitespace-nowrap">
+                    Apple
                   </a>
                   <a href="${links.melon}" target="_blank" rel="noopener noreferrer"
-                    class="touch-press px-3 py-2 rounded-xl text-xs font-semibold bg-green-50 text-green-700">
-                    Melon ↗
+                    class="touch-press flex-1 py-1.5 px-1 rounded-xl text-[11px] font-semibold bg-green-50 text-green-700 text-center whitespace-nowrap">
+                    Melon
                   </a>
                 </div>
               </div>
